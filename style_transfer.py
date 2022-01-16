@@ -1,4 +1,4 @@
-from os import system
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -11,180 +11,206 @@ import torchvision
 import torchvision.transforms as tt
 import torchvision.models as models
 
+import copy
 
-def load_image(image_path, max_size=512, shape=None):
+
+def load_image(image_path):
     image = Image.open(image_path).convert('RGB')
+    imsize = 512 if torch.cuda.is_available() else 256
 
-    if max(image.size) > max_size:
-        size = max_size
-    else:
-        size = max(image.size)
-
-    if shape is not None:
-        size = shape
-
-    image_transforms = tt.Compose([
-            # tt.Resize((size, int(1.5 * size))),
-            tt.Resize(size),
-            tt.ToTensor(),
-            tt.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-
-    image = image_transforms(image)[:3, :, :].unsqueeze(0)
+    image_transforms = tt.Compose(
+        [
+            tt.Resize(imsize),
+            tt.CenterCrop(imsize),
+            tt.ToTensor()
+        ]
+    )
+    image = image_transforms(image).unsqueeze(0)
 
     return image
 
 
-def im_convert(tensor):
-    image = tensor.to('cpu').clone().detach()
-    image = np.rollaxis(image.numpy().squeeze(), 0, 3)
-    image = image * np.array((0.229, 0.224, 0.225)) + np.array((0.485, 0.456, 0.406))
+# def im_convert(tensor):
+#     image = tensor.to('cpu').clone().detach()
+#     image = np.rollaxis(image.numpy().squeeze(), 0, 3)
+#     image = image * np.array((0.229, 0.224, 0.225)) + np.array((0.485, 0.456, 0.406))
 
-    image = image.clip(0, 1)
+#     image = image.clip(0, 1)
 
-    return image
+#     return image
 
-def inverse_normalize(tensor):
+def get_gram_matrix(tensor):
+    c, n, h, w = tensor.size()
+    tensor = tensor.view(c * n, h * w)
+    gram = torch.mm(tensor, tensor.t())
 
-    inv_trans = tt.Compose([
-        tt.Normalize((0., 0., 0.),(1/0.229, 1/0.224, 1/0.225)),
-        tt.Normalize((-0.485, -0.456, -0.406),(1., 1., 1.))
-    ])
+    return gram.div(c * n * h * w)
 
-    return inv_trans(tensor)
+
+class ContentLoss(nn.Module):
+    def __init__(self, target):
+        super().__init__()
+        self.target = target.detach()
+        self.loss = F.mse_loss(self.target, self.target)
+
+    def forward(self, input):
+        self.loss = F.mse_loss(input, self.target)
+        return input
+
+
+class StyleLoss(nn.Module):
+    def __init__(self, target_feature):
+        super().__init__()
+        self.target = get_gram_matrix(target_feature).detach()
+        self.loss = F.mse_loss(self.target, self.target)
+
+    def forward(self, input):
+        G = get_gram_matrix(input)
+        self.loss = F.mse_loss(G, self.target)
+        return input
+
+
+class Normalization(nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        self.mean = torch.tensor(mean).view(-1, 1, 1)
+        self.std = torch.tensor(std).view(-1, 1, 1)
+
+    def forward(self, image):
+        return (image - self.mean) / self.std
 
 
 class NST:
-    def __init__(self, device=torch.device('cpu'), model_init=None, weights=None, style_weight=1e3, content_weight=1e4, layers=None):
-        self.device = device
-        self.imsize = 512 if self.device == torch.device('cuda') else 256
+    def __init__(self, style_layers=None, content_layers=None):
+        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-        if weights is None:
-            self.style_weights = {
-                'conv1_1': 0.75,
-                'conv2_1': 0.5,
-                'conv3_1': 0.25,
-                'conv4_1': 0.2,
-                'conv5_1': 0.2,
-            }
+        self.cnn = models.vgg19(pretrained=True).features.to(self.device).eval()
 
-        self.style_weight = style_weight
-        self.content_weight = content_weight
+        self.mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device)
+        self.std = torch.tensor([0.229, 0.224, 0.225]).to(self.device)
 
-        self.model = self.model_init() if model_init is None else model_init()
+        if style_layers is None:
+            self.style_layers = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
+        else:
+            self.style_layers = style_layers
 
-        self.layers = layers
+        if content_layers is None:
+            self.content_layers = ['conv_4']
+        else:
+            self.content_layers = content_layers
 
-    def model_init(self):
-        torch.utils.model_zoo.load_url(
-            'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth', model_dir='models/'
-        )
-        cnn = models.vgg19()
-        cnn.load_state_dict(torch.load('models/vgg19-dcbb9e9d.pth'))
-        for p in cnn.parameters():
-            p.requires_grad_(False)
+    def model_init(self, style_image, content_image):
+        # Copy model
+        cnn_copy = copy.deepcopy(self.cnn)
 
-        for i, layer in enumerate(cnn.features):
-            if isinstance(layer, torch.nn.MaxPool2d):
-                cnn.features[i] = torch.nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
+        normalization = Normalization(self.mean, self.std).to(self.device)
+        
+        content_losses = []
+        style_losses = []
 
-        return cnn
+        # Build new model
+        model = nn.Sequential(normalization)
 
-    def get_features(self, image):
-        if self.layers is None:
-            self.layers = {
-                '0': 'conv1_1',  # style layers
-                '5': 'conv2_1',
-                '10': 'conv3_1',
-                '19': 'conv4_1',
-                '28': 'conv5_1',
-                '21': 'conv4_2',  # content layer
-            }
+        i = 0
+        for layer in cnn_copy.children():
+            if isinstance(layer, nn.Conv2d):
+                i += 1
+                name = 'conv_{}'.format(i)
+            elif isinstance(layer, nn.ReLU):
+                name = 'relu_{}'.format(i)
+                layer = nn.ReLU(inplace=False)
+            elif isinstance(layer, nn.MaxPool2d):
+                name = 'pool_{}'.format(i)
+                # Replacing MaxPool to AvgPool for higher quality results
+                layer = nn.AvgPool2d(kernel_size=2, stride=2, padding=0) 
+            elif isinstance(layer, nn.BatchNorm2d):
+                name = 'bn_{}'.format(i)
+            else:
+                raise RuntimeError('Unrecognized layer {}'.format(layer.__class__.__name__))
 
-        features = {}
-        x = image
-        for name, layer in enumerate(self.model.features):
-            x = layer(x)
-            if str(name) in self.layers:
-                features[self.layers[str(name)]] = x
+            model.add_module(name, layer)
 
-        return features
+            if name in self.content_layers:
+                target = model(content_image).detach()
+                content_loss = ContentLoss(target)
+                model.add_module('content_loss_{}'.format(i), content_loss)
+                content_losses.append(content_loss)
 
-    def get_gram_matrix(self, tensor):
-        c, n, h, w = tensor.size()
-        tensor = tensor.view(n, h * w)
-        gram = torch.mm(tensor, tensor.t())
+            if name in self.style_layers:
+                target_feature = model(style_image).detach()
+                style_loss = StyleLoss(target_feature)
+                model.add_module('style_loss_{}'.format(i), style_loss)
+                style_losses.append(style_loss)
 
-        return gram
+        # Remove useless layers
+        for i in range(len(model) - 1, -1, -1):
+            if isinstance(model[i], ContentLoss) or isinstance(model[i], StyleLoss):
+                break
 
-    def transform_image(self, content_path, style_path, n_epochs, from_content=False):
+        model = model[:(i+1)]    
+
+        return model, style_losses, content_losses
+
+    def transform_image(self, content_path, style_path, n_epochs, style_weight=1000000, content_weight=1):
         if self.device == torch.device('cuda'):
             torch.cuda.empty_cache()
 
-        content = load_image(content_path, self.imsize).to(self.device)
-        style = load_image(style_path, self.imsize).to(self.device)
+        # Loading images
+        style_image = load_image(style_path).to(self.device)
+        content_image = load_image(content_path).to(self.device)
 
-        self.model.to(self.device).eval()
+        # Building model
+        model, style_losses, content_losses = self.model_init(style_image, content_image)
+        model.requires_grad_(False).to(self.device)
 
-        style_features = self.get_features(style)
-        content_features = self.get_features(content)
+        # Building target
+        target = content_image.clone().requires_grad_(True).to(self.device)
 
-        style_gram_matrices = {
-            layer: self.get_gram_matrix(style_features[layer]) for layer in style_features
-        }
+        # optimizer initialization
+        optimizer = optim.LBFGS([target.requires_grad_()])
 
-        if not from_content:
-            target = torch.randn_like(content).requires_grad_(True).to(self.device)
-        else:
-            target = content.clone().requires_grad_(True).to(self.device)
-
-        optimizer = optim.LBFGS([target])
-
-        epoch = [0]
-        while epoch[0] <= n_epochs:
+        # Main train loop
+        run = [0]
+        while run[0] <= n_epochs:
 
             def closure():
-                optimizer.zero_grad()
-
-                # Getting target features
-                target_features = self.get_features(target)
-
-                # Computing content loss
-                content_loss = torch.mean(
-                    (target_features['conv4_2'] - content_features['conv4_2']) ** 2
-                )
-
-                # Computing style loss
-                style_loss = 0
-                for layer in self.style_weights:
-                    target_feature = target_features[layer]
-                    target_gram_matrix = self.get_gram_matrix(target_feature)
-
-                    _, c, h, w = target_feature.shape
-                    style_gram_matrix = style_gram_matrices[layer]
-
-                    style_loss_per_layer = self.style_weights[layer] * torch.mean(
-                        (target_gram_matrix - style_gram_matrix) ** 2
-                    )
-
-                    style_loss += style_loss_per_layer / (c * h * w)
-
-                content_loss = self.content_weight * content_loss
-                style_loss = self.style_weight * style_loss
-
-                loss_fn = content_loss + style_loss
-                loss_fn.backward(retain_graph=True)
-
-                epoch[0] += 1
-                if epoch[0] % 50 == 0:
-                    system('clear')
-                    print(f"Epoch: {epoch[0]} / {n_epochs}")   
-                    print(f"Total loss: {round(loss_fn.item(), 4)} (Style: {round(style_loss.item(), 2)}, Content: {round(content_loss.item(), 2)})")
-
-                return content_loss + style_loss
-
-            optimizer.step(closure)
+                with torch.no_grad():
+                    target.data.clamp_(0, 1)
                 
-        print('Transform complete, checkout \'results\' folder')
+                optimizer.zero_grad()
+                model(target)
 
+                style_score = 0
+                content_score = 0
+
+                for sl in style_losses:
+                    style_score += sl.loss
+                for cl in content_losses:
+                    content_score += cl.loss
+
+                style_score *= style_weight
+                content_score *= content_weight
+
+                loss = style_score + content_score
+                loss.backward()
+
+                run[0] += 1
+                if run[0] % 50 == 0:
+                    os.system('clear')
+                    print(f'Epoch: {run[0]}/{n_epochs}')
+                    print('Total Loss: {:4f} (Style: {:2f} | Content: {:2f})'.format(loss.item(), style_score, content_score))
+                    print()
+                
+                return style_score + content_score
+            
+            optimizer.step(closure)
+        
+        with torch.no_grad():
+            target.data.clamp_(0, 1)
+
+        print('Transform complete, checkout \'results\' folder')
+        
         return target
+
+
+        
