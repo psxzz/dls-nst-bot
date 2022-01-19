@@ -4,8 +4,7 @@ from aiogram.types import ReplyKeyboardRemove
 from aiogram import Dispatcher, types
 from bot_init import dp, bot
 from menu import confirm_markup, startup_markup, cancel_markup
-from models import style_transfer
-import os
+import asyncio
 
 
 class FSMStyleTransfering(StatesGroup):
@@ -47,9 +46,11 @@ async def confirm(message: types.Message, state: FSMContext):
 
     await message.answer(text="Ok. Running style transfering!", reply_markup=ReplyKeyboardRemove())
 
-    # TODO: Fix bot idling 
-    await style_transfer.transform(content_path, style_path, save_path)
-
+    args = f'python3.8 models/style_transfer.py {content_path} {style_path} {save_path}'.split()
+    # Run NST subprocess
+    p = await asyncio.create_subprocess_exec(*args)
+    await p.wait()
+    
     await message.answer(text='Your photo is ready!', reply_markup=startup_markup)
     file = types.InputFile(save_path)
     await message.answer_photo(file)
@@ -71,11 +72,11 @@ async def clear_files(state: FSMContext):
     async with state.proxy() as data:
         if 'content' in data:
             content_photo_id = data['content']
-            os.system(f'rm photos/content/{content_photo_id}*')
+            await asyncio.create_subprocess_exec(f'rm photos/content/{content_photo_id}*')
         if 'style' in data:
             style_photo_id = data['style']
-            os.system(f'rm photos/style/{style_photo_id}*')
-            os.system(f'rm photos/saved/{style_photo_id}*')
+            await asyncio.create_subprocess_exec(f'rm photos/style/{style_photo_id}*')
+            await asyncio.create_subprocess_exec(f'rm photos/saved/{style_photo_id}*')
 
 
 def register_st_handlers(dp : Dispatcher):

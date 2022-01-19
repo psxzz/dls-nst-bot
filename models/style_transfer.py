@@ -1,3 +1,4 @@
+import sys
 import copy
 import numpy as np
 from PIL import Image
@@ -199,11 +200,8 @@ class NST:
 
         save_image(target, save_path)
 
-
-def create_model():
-    global nst
+        
+if __name__ == "__main__":
     nst = NST()
-
-
-async def transform(content_path, style_path, save_path):
+    content_path, style_path, save_path = [sys.argv[i] for i in range(1, 4)]
     nst.transform_image(content_path, style_path, save_path)
