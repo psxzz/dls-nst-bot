@@ -1,1 +1,1 @@
-from menu.markup import startup_markup, confirm_markup, cancel_markup
+from menu.markups import startup_markup, confirm_markup, cancel_markup

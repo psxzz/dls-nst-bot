@@ -1,4 +1,4 @@
-import os
+import copy
 import numpy as np
 from PIL import Image
 
@@ -9,8 +9,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as tt
 import torchvision.models as models
-
-import copy
+from torchvision.utils import save_image
 
 
 def load_image(image_path, device):
@@ -147,7 +146,7 @@ class NST:
 
         return model, style_losses, content_losses
 
-    def transform_image(self, content_path, style_path, n_epochs=500, 
+    def transform_image(self, content_path, style_path, save_path, n_epochs=500, 
                             style_weight=1000000, content_weight=1, 
                             style_layers=None, content_layers=None):
         if self.device == torch.device('cuda'):
@@ -193,17 +192,18 @@ class NST:
             loss = style_score + content_score
             loss.backward()
 
-            if epoch % 50 == 0:
-                os.system('clear')
-                print(f'Epoch: {epoch}/{n_epochs}')
-                print(f'Total Loss: {round(loss.item(), 4)} (Style: {round(style_score.item(), 2)} | Content: {round(content_score.item(), 2)})')
-                print()
-
             optimizer.step()
 
         with torch.no_grad():
             target.data.clamp_(0, 1)
 
-        print('Transform complete, checkout \'results\' folder')
+        save_image(target, save_path)
 
-        return target
+
+def create_model():
+    global nst
+    nst = NST()
+
+
+async def transform(content_path, style_path, save_path):
+    nst.transform_image(content_path, style_path, save_path)
