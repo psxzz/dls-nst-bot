@@ -1,20 +1,21 @@
-from aiogram import types, Dispatcher
-
+from aiogram import Dispatcher, types
 from bot_init import dp
 from menu.markups import startup_markup
-from menu.replies import welcome_msg, about_nst_msg
+from menu.replies import about_nst_msg, welcome_msg
 
 
 async def send_welcome(message: types.Message):
     await message.answer(
         text=welcome_msg,
         reply_markup=startup_markup,
+        parse_mode='Markdown'
     )
 
 async def about_nst(message: types.Message):
     await message.answer(
         text=about_nst_msg,
-        reply_markup=startup_markup
+        reply_markup=startup_markup,
+        parse_mode='Markdown'
     )
 
 

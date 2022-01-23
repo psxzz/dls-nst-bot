@@ -1,15 +1,15 @@
-import sys
 import copy
-import numpy as np
-from PIL import Image
+import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torchvision
-import torchvision.transforms as tt
 import torchvision.models as models
+import torchvision.transforms as tt
+from PIL import Image
 from torchvision.utils import save_image
 
 
@@ -147,7 +147,7 @@ class NST:
 
         return model, style_losses, content_losses
 
-    def transform_image(self, content_path, style_path, save_path, n_epochs=500, 
+    def transform_image(self, content_path, style_path, save_path, n_epochs=300, 
                             style_weight=1000000, content_weight=1, 
                             style_layers=None, content_layers=None):
         if self.device == torch.device('cuda'):
@@ -203,5 +203,5 @@ class NST:
         
 if __name__ == "__main__":
     nst = NST(device=torch.device('cuda'))
-    content_path, style_path, save_path = [sys.argv[i] for i in range(1, 4)]
-    nst.transform_image(content_path, style_path, save_path, style_weight=2000, content_weight=1, n_epochs=2000)
+    _, content_path, style_path, save_path, style_weight, content_weight, n_epochs = sys.argv
+    nst.transform_image(content_path, style_path, save_path, style_weight=int(style_weight), content_weight=int(content_weight), n_epochs=int(n_epochs))
