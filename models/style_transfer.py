@@ -202,6 +202,6 @@ class NST:
 
         
 if __name__ == "__main__":
-    nst = NST(device=torch.device('cuda'))
+    nst = NST()
     _, content_path, style_path, save_path, style_weight, content_weight, n_epochs = sys.argv
     nst.transform_image(content_path, style_path, save_path, style_weight=int(style_weight), content_weight=int(content_weight), n_epochs=int(n_epochs))
