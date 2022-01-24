@@ -8,7 +8,7 @@ from handlers import messages, style_transfering
 
 WEBHOOK_URL = f"https://neural-st-bot.herokuapp.com/{API_TOKEN}"
 WEBAPP_HOST = 'localhost'
-WEBAPP_PORT = int(os.environ.get('PORT', 5000))
+WEBAPP_PORT = 3001
 
 
 async def on_startup(dp):
