@@ -1,5 +1,9 @@
 asyncio
 aiogram
+uvloop
+cchardet
+aiodns
+aiohttp[speedups]
 numpy
 
 --find-links https://download.pytorch.org/whl/torch_stable.html
