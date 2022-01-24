@@ -6,7 +6,6 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardRemove
-from matplotlib.pyplot import text
 from bot_init import bot, dp
 from menu.markups import (cancel_markup, confirm_markup, settings_markup,
                           startup_markup)
@@ -71,6 +70,11 @@ async def change_setting(message: types.Message, state: FSMContext):
                 data['n_epochs'] = value
             else:
                 await message.answer(text='Неизвестная команда, попробуйте еще раз', reply_markup=settings_markup)
+
+            await message.answer(
+                text='_Текущие настройки:_\n\n*style_weight* — _{}_\n*content_weight* — _{}_\n*epochs* — _{}_'.format(data['style_weight'], data['content_weight'], data['n_epochs']),
+                parse_mode='Markdown'
+            )
 
 
 async def confirm(message: types.Message, state: FSMContext):
