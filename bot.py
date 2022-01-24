@@ -24,7 +24,7 @@ async def on_shutdown(_):
 if __name__ == "__main__":
     executor.start_webhook(
         dispatcher=dp, 
-        webhook_path='', 
+        webhook_path='/bot.py', 
         on_startup=on_startup, 
         on_shutdown=on_shutdown,
         skip_updates=True,
