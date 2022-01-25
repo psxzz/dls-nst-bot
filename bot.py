@@ -1,4 +1,5 @@
 import os
+import asyncio
 
 from aiogram import executor
 
@@ -13,14 +14,14 @@ WEBHOOK_URL = f"https://neural-st-bot.herokuapp.com{WEBHOOK_PATH}"
 
 
 async def on_startup(dp):
-    os.system('mkdir photos photos/content/ photos/style/ photos/saved/')
     await bot.set_webhook(WEBHOOK_URL)
+    await asyncio.create_subprocess_shell('mkdir photos photos/content/ photos/style/ photos/saved/')
     messages.register_message_handlers(dp)
     style_transfering.register_st_handlers(dp)
 
 
 async def on_shutdown(_):
-    os.system('rm photos/content/* photos/style/* photos/saved/*')
+    await asyncio.create_subprocess_shell('rm photos/content/* photos/style/* photos/saved/*')
 
 
 if __name__ == "__main__":

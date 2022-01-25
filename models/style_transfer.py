@@ -76,7 +76,7 @@ class NST:
     def __init__(self, device=None):
         self.device = torch.device('cpu') if device is None else device
 
-        self.cnn = models.vgg19_bn(pretrained=True).features.to(self.device).eval()
+        self.cnn = models.vgg11_bn(pretrained=True).features.to(self.device).eval()
 
         self.mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device)
         self.std = torch.tensor([0.229, 0.224, 0.225]).to(self.device)
