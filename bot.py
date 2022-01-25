@@ -15,7 +15,6 @@ WEBHOOK_URL = f"https://neural-st-bot.herokuapp.com{WEBHOOK_PATH}"
 
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
-    await asyncio.create_subprocess_shell('mkdir photos photos/content/ photos/style/ photos/saved/')
     messages.register_message_handlers(dp)
     style_transfering.register_st_handlers(dp)
 
