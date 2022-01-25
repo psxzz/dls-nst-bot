@@ -75,7 +75,7 @@ class NST:
     def __init__(self, device=None):
         self.device = torch.device('cpu') if device is None else device
 
-        self.cnn = models.alexnet(pretrained=True).features.to(self.device).eval()
+        self.cnn = models.vgg19_bn(pretrained=True).features.to(self.device).eval()
 
         self.mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device)
         self.std = torch.tensor([0.229, 0.224, 0.225]).to(self.device)
@@ -124,8 +124,6 @@ class NST:
                 )
 
             model.add_module(name, layer)
-            if name == f"conv_{i}":
-                model.add_module(f"bn_{i}", nn.BatchNorm2d(layer.out_channels).to(self.device))
 
             if name in content_layers:
                 target = model(content_image).detach()
@@ -203,6 +201,6 @@ class NST:
 
         
 if __name__ == "__main__":
-    nst = NST()
+    nst = NST(torch.device('cuda'))
     _, content_path, style_path, save_path, style_weight, content_weight, n_epochs = sys.argv
     nst.transform_image(content_path, style_path, save_path, style_weight=int(style_weight), content_weight=int(content_weight), n_epochs=int(n_epochs))
