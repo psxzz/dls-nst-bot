@@ -1,7 +1,6 @@
 import copy
 import sys
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -76,7 +75,7 @@ class NST:
     def __init__(self, device=None):
         self.device = torch.device('cpu') if device is None else device
 
-        self.cnn = models.vgg11_bn(pretrained=True).features.to(self.device).eval()
+        self.cnn = models.alexnet(pretrained=True).features.to(self.device).eval()
 
         self.mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device)
         self.std = torch.tensor([0.229, 0.224, 0.225]).to(self.device)
@@ -84,7 +83,7 @@ class NST:
         # Style and content layers were moved
         # from convolutional to activation layers
         self.style_layers_default = ['relu_1', 'relu_2', 'relu_3', 'relu_4', 'relu_5']
-        self.content_layers_default = ['relu_4']
+        self.content_layers_default = ['relu_3']
 
     def model_init(self, style_image, content_image, style_layers=None, content_layers=None):
         # Initialize layers if its none
@@ -125,6 +124,8 @@ class NST:
                 )
 
             model.add_module(name, layer)
+            if name == f"conv_{i}":
+                model.add_module(f"bn_{i}", nn.BatchNorm2d(layer.out_channels).to(self.device))
 
             if name in content_layers:
                 target = model(content_image).detach()
