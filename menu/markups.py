@@ -1,5 +1,4 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Buttons
 help_btn = KeyboardButton('/help')
