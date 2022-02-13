@@ -1,3 +1,7 @@
+"""
+    Данный файл содержит обработчики сообщений для начального меню.
+    (/help, /start, /about)
+"""
 from aiogram import Dispatcher, types
 from bot_init import dp
 from menu.markups import startup_markup
